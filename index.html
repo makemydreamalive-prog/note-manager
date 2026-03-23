@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>note マネージャー</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f7f7f5; color: #333; }
+.app { max-width: 720px; margin: 0 auto; padding: 1.5rem 1rem; }
+.header { display: flex; align-items: center; gap: 12px; margin-bottom: 1.5rem; }
+.logo { width: 36px; height: 36px; background: #41C9B4; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.logo svg { width: 20px; height: 20px; fill: white; }
+.header h1 { font-size: 18px; font-weight: 500; }
+.tabs { display: flex; gap: 4px; margin-bottom: 1.5rem; border-bottom: 1px solid #e5e5e5; }
+.tab { padding: 8px 16px; font-size: 14px; background: none; border: none; cursor: pointer; color: #888; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab.active { color: #41C9B4; border-bottom-color: #41C9B4; font-weight: 500; }
+.section { display: none; }
+.section.active { display: block; }
+.input-row { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+.input-row input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: #fff; }
+.input-row input:focus { outline: none; border-color: #41C9B4; }
+.btn { padding: 8px 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; background: #fff; white-space: nowrap; }
+.btn:hover { background: #f5f5f5; }
+.btn.primary { background: #41C9B4; border-color: #41C9B4; color: white; }
+.btn.primary:hover { background: #2db8a0; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.status { font-size: 13px; color: #888; margin-bottom: 1rem; min-height: 20px; }
+.status.error { color: #e53935; }
+.status.loading { color: #41C9B4; }
+.summary-bar { display: flex; gap: 12px; margin-bottom: 1.5rem; }
+.metric { flex: 1; background: #fff; border-radius: 8px; padding: 0.75rem 1rem; border: 1px solid #eee; }
+.metric .label { font-size: 12px; color: #888; margin-bottom: 4px; }
+.metric .value { font-size: 22px; font-weight: 500; }
+.comment-card { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 12px; }
+.article-title { font-size: 13px; color: #888; margin-bottom: 6px; }
+.article-title a { color: #41C9B4; text-decoration: none; }
+.commenter { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.commenter-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: #eee; }
+.commenter-name { font-size: 13px; font-weight: 500; }
+.commenter-date { font-size: 12px; color: #aaa; }
+.comment-body { font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
+.comment-actions { display: flex; gap: 8px; }
+.btn-sm { padding: 4px 12px; font-size: 12px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; background: #fff; text-decoration: none; display: inline-block; color: #333; }
+.btn-sm:hover { background: #f5f5f5; }
+.feed-card { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 12px; display: flex; gap: 12px; align-items: flex-start; }
+.feed-thumb { width: 72px; height: 48px; border-radius: 6px; object-fit: cover; background: #eee; flex-shrink: 0; }
+.feed-info { flex: 1; min-width: 0; }
+.feed-info .creator { font-size: 12px; color: #888; margin-bottom: 4px; }
+.feed-info .title { font-size: 14px; font-weight: 500; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-info .title a { color: #333; text-decoration: none; }
+.feed-info .title a:hover { color: #41C9B4; }
+.feed-info .date { font-size: 12px; color: #aaa; }
+.creator-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.creator-row input { flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; }
+.creator-row input:focus { outline: none; border-color: #41C9B4; }
+.creator-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+.creator-tag { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #f0f0f0; border-radius: 99px; font-size: 13px; }
+.creator-tag button { background: none; border: none; cursor: pointer; color: #aaa; font-size: 14px; padding: 0; line-height: 1; }
+.creator-tag button:hover { color: #e53935; }
+.empty { text-align: center; padding: 2rem; color: #aaa; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+    </div>
+    <h1>note マネージャー</h1>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('comments',this)">コメント管理</button>
+    <button class="tab" onclick="switchTab('feed',this)">フィード</button>
+  </div>
+
+  <div id="comments" class="section active">
+    <div class="input-row">
+      <input type="text" id="urlname-input" placeholder="アカウント名（例: your_urlname）" onkeydown="if(event.key==='Enter')fetchComments()" />
+      <button class="btn primary" onclick="fetchComments()" id="fetch-btn">取得</button>
+    </div>
+    <div id="comment-status" class="status"></div>
+    <div id="summary-bar" class="summary-bar" style="display:none">
+      <div class="metric"><div class="label">取得した記事</div><div class="value" id="m-articles">0</div></div>
+      <div class="metric"><div class="label">コメント合計</div><div class="value" id="m-total">0</div></div>
+      <div class="metric"><div class="label">未返信</div><div class="value" id="m-unreplied" style="color:#E65100">0</div></div>
+    </div>
+    <div id="comment-list"></div>
+  </div>
+
+  <div id="feed" class="section">
+    <div class="creator-row">
+      <input type="text" id="creator-input" placeholder="クリエイターのアカウント名" onkeydown="if(event.key==='Enter')addCreator()" />
+      <button class="btn" onclick="addCreator()">追加</button>
+      <button class="btn primary" onclick="fetchFeeds()" id="feed-btn">更新</button>
+    </div>
+    <div id="creator-tags" class="creator-tags"></div>
+    <div id="feed-status" class="status"></div>
+    <div id="feed-list"></div>
+  </div>
+</div>
+
+<script>
+const CORS = 'https://corsproxy.io/?url=';
+const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const NOTE_API = 'https://note.com/api';
+
+let repliedComments = JSON.parse(localStorage.getItem('nc_replied') || '[]');
+let creators = JSON.parse(localStorage.getItem('nc_creators') || '[]');
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(tab).classList.add('active');
+}
+
+function saveReplied() { localStorage.setItem('nc_replied', JSON.stringify(repliedComments)); }
+function saveCreators() { localStorage.setItem('nc_creators', JSON.stringify(creators)); }
+
+async function fetchComments() {
+  const urlname = document.getElementById('urlname-input').value.trim();
+  if (!urlname) return;
+  const status = document.getElementById('comment-status');
+  const list = document.getElementById('comment-list');
+  const btn = document.getElementById('fetch-btn');
+  btn.disabled = true;
+  list.innerHTML = '';
+  document.getElementById('summary-bar').style.display = 'none';
+  status.className = 'status loading';
+  status.textContent = '記事一覧を取得中...';
+
+  try {
+    let allNotes = [];
+    let page = 1;
+    while (page <= 5) {
+      const res = await fetch(CORS + encodeURIComponent(`${NOTE_API}/v2/creators/${urlname}/contents?kind=note&page=${page}`));
+      if (!res.ok) throw new Error('ユーザーが見つからないか、APIエラーが発生しました');
+      const data = await res.json();
+      const contents = data?.data?.contents || [];
+      if (contents.length === 0) break;
+      allNotes = allNotes.concat(contents);
+      if (data?.data?.isLastPage) break;
+      page++;
+    }
+    if (allNotes.length === 0) throw new Error('記事が見つかりませんでした。アカウント名を確認してね');
+
+    status.textContent = `${allNotes.length}件の記事からコメントを取得中...`;
+    let allComments = [];
+    const targets = allNotes.filter(n => (n.commentCount || n.comment_count || 0) > 0).slice(0, 20);
+
+    for (const note of targets) {
+      try {
+        const res = await fetch(CORS + encodeURIComponent(`${NOTE_API}/v1/note/${note.id}/comments`));
+        if (!res.ok) continue;
+        const data = await res.json();
+        const comments = data?.data?.comments || [];
+        comments.forEach(c => {
+          allComments.push({ ...c, articleTitle: note.name, articleKey: note.key });
+        });
+      } catch(e) {}
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    const unreplied = allComments.filter(c => !repliedComments.includes(c.id));
+    document.getElementById('m-articles').textContent = allNotes.length;
+    document.getElementById('m-total').textContent = allComments.length;
+    document.getElementById('m-unreplied').textContent = unreplied.length;
+    document.getElementById('summary-bar').style.display = 'flex';
+
+    if (unreplied.length === 0) {
+      list.innerHTML = '<div class="empty">未返信のコメントはありません</div>';
+    } else {
+      unreplied.forEach(c => {
+        const date = new Date(c.createdAt || c.created_at || Date.now()).toLocaleDateString('ja-JP');
+        const avatar = c.user?.userProfileImagePath || c.user?.user_profile_image_path || '';
+        const name = c.user?.nickname || '不明';
+        const comment = c.body || c.comment || '';
+        const articleUrl = `https://note.com/${urlname}/n/${c.articleKey}`;
+        list.innerHTML += `
+          <div class="comment-card" id="cc-${c.id}">
+            <div class="article-title"><a href="${articleUrl}" target="_blank">${c.articleTitle}</a></div>
+            <div class="commenter">
+              ${avatar ? `<img class="commenter-avatar" src="${avatar}" onerror="this.style.display='none'" />` : ''}
+              <div>
+                <div class="commenter-name">${name}</div>
+                <div class="commenter-date">${date}</div>
+              </div>
+            </div>
+            <div class="comment-body">${comment}</div>
+            <div class="comment-actions">
+              <button class="btn-sm" onclick="markReplied(${c.id})">返信済みにする</button>
+              <a class="btn-sm" href="${articleUrl}#comments" target="_blank">noteで返信</a>
+            </div>
+          </div>`;
+      });
+    }
+    status.className = 'status';
+    status.textContent = `完了 — 未返信コメント ${unreplied.length}件`;
+  } catch(e) {
+    status.className = 'status error';
+    status.textContent = e.message;
+  }
+  btn.disabled = false;
+}
+
+function markReplied(id) {
+  if (!repliedComments.includes(id)) repliedComments.push(id);
+  saveReplied();
+  const card = document.getElementById('cc-' + id);
+  if (card) card.remove();
+  const el = document.getElementById('m-unreplied');
+  el.textContent = Math.max(0, parseInt(el.textContent) - 1);
+}
+
+function renderCreatorTags() {
+  document.getElementById('creator-tags').innerHTML = creators.map(c => `
+    <div class="creator-tag">
+      <span>@${c}</span>
+      <button onclick="removeCreator('${c}')">×</button>
+    </div>`).join('');
+}
+
+function addCreator() {
+  const input = document.getElementById('creator-input');
+  const val = input.value.trim().replace('@', '');
+  if (!val || creators.includes(val)) { input.value = ''; return; }
+  creators.push(val);
+  saveCreators();
+  renderCreatorTags();
+  input.value = '';
+}
+
+function removeCreator(name) {
+  creators = creators.filter(c => c !== name);
+  saveCreators();
+  renderCreatorTags();
+}
+
+async function fetchFeeds() {
+  if (creators.length === 0) {
+    document.getElementById('feed-status').textContent = 'クリエイターを追加してください';
+    return;
+  }
+  const status = document.getElementById('feed-status');
+  const list = document.getElementById('feed-list');
+  const btn = document.getElementById('feed-btn');
+  btn.disabled = true;
+  status.className = 'status loading';
+  status.textContent = 'フィードを取得中...';
+  list.innerHTML = '';
+
+  let allItems = [];
+  for (const creator of creators) {
+    try {
+      const rssUrl = `https://note.com/${creator}/rss`;
+      const res = await fetch(`${RSS2JSON}${encodeURIComponent(rssUrl)}&count=10`);
+      const data = await res.json();
+      if (data.status === 'ok') {
+        data.items.forEach(item => allItems.push({ ...item, creatorName: creator }));
+      }
+    } catch(e) {}
+  }
+
+  allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+  if (allItems.length === 0) {
+    list.innerHTML = '<div class="empty">記事が取得できませんでした</div>';
+  } else {
+    allItems.forEach(item => {
+      const date = new Date(item.pubDate).toLocaleDateString('ja-JP');
+      const thumb = item.thumbnail || '';
+      list.innerHTML += `
+        <div class="feed-card">
+          ${thumb ? `<img class="feed-thumb" src="${thumb}" onerror="this.style.display='none'" />` : '<div class="feed-thumb"></div>'}
+          <div class="feed-info">
+            <div class="creator">@${item.creatorName}</div>
+            <div class="title"><a href="${item.link}" target="_blank">${item.title}</a></div>
+            <div class="date">${date}</div>
+          </div>
+        </div>`;
+    });
+  }
+
+  status.className = 'status';
+  status.textContent = `${allItems.length}件の記事を取得しました`;
+  btn.disabled = false;
+}
+
+renderCreatorTags();
+</script>
+</body>
+</html>

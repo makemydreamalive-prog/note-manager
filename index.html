@@ -97,7 +97,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div id="comments" class="section active">
     <div class="input-row">
       <input type="text" id="urlname-input" placeholder="アカウント名（例: your_urlname）" onkeydown="if(event.key==='Enter')fetchArticles()" />
-      <input type="number" id="article-count" value="5" min="1" max="30" style="width:60px;flex:none;text-align:center" title="取得する記事数" />
+      <input type="number" id="article-count" value="1" min="1" max="30" style="width:60px;flex:none;text-align:center" title="取得する記事数" />
       <span style="font-size:13px;color:#888;align-self:center;flex:none">件</span>
       <button class="btn primary" onclick="fetchArticles()" id="fetch-btn">取得</button>
     </div>

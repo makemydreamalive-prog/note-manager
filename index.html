@@ -125,7 +125,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <script>
 const CORS = 'https://corsproxy.io/?url=';
-const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
+function parseRSS(xml) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+  const items = [];
+  doc.querySelectorAll('item').forEach(el => {
+    const get = tag => (el.querySelector(tag) ? el.querySelector(tag).textContent : '');
+    let thumb = '';
+    const enc = el.querySelector('enclosure');
+    if (enc && enc.getAttribute('type')?.startsWith('image')) thumb = enc.getAttribute('url') || '';
+    if (!thumb) { const m = get('description').match(/<img[^>]+src=["']([^"']+)/); if (m) thumb = m[1]; }
+    items.push({ title: get('title'), link: get('link'), pubDate: get('pubDate'), thumbnail: thumb, description: get('description') });
+  });
+  return items;
+}
 const NOTE_API = 'https://note.com/api';
 
 let repliedComments = JSON.parse(localStorage.getItem('nc_replied') || '[]');
@@ -353,11 +366,10 @@ async function fetchFeeds() {
   for (const creator of creators) {
     try {
       const rssUrl = `https://note.com/${creator}/rss`;
-      const res = await fetch(`${RSS2JSON}${encodeURIComponent(rssUrl)}&count=10`);
-      const data = await res.json();
-      if (data.status === 'ok') {
-        data.items.forEach(item => allItems.push({ ...item, creatorName: creator }));
-      }
+      const res = await fetch(CORS + encodeURIComponent(rssUrl));
+      const xml = await res.text();
+      const items = parseRSS(xml);
+      items.forEach(item => allItems.push({ ...item, creatorName: creator }));
     } catch(e) {}
   }
 

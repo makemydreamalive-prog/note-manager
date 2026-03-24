@@ -247,18 +247,6 @@ function toggleHideRead() {
   });
 }
 
-function timeAgo(dateStr) {
-  if (!dateStr) return '';
-  const now = new Date();
-  const d = new Date(dateStr);
-  const diff = Math.floor((now - d) / 1000);
-  if (diff < 60) return 'たった今';
-  if (diff < 3600) return Math.floor(diff / 60) + '分前';
-  if (diff < 86400) return Math.floor(diff / 3600) + '時間前';
-  if (diff < 2592000) return Math.floor(diff / 86400) + '日前';
-  return d.toLocaleDateString('ja-JP');
-}
-
 function truncateTitle(title, maxLen) {
   if (!title) return '';
   return title.length > maxLen ? title.slice(0, maxLen) + '...' : title;
@@ -355,8 +343,8 @@ async function fetchArticles() {
         articlesWithComments++;
         totalComments += comments.length;
         comments.forEach(c => {
-          const cTimeAgo = timeAgo(c.created_at);
-          const avatar = c.user?.user_profile_image_path || '';
+          const cDate = c.created_at ? new Date(c.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          const avatar = c.user?.profile_image_url || '';
           const userName = c.user?.nickname || c.user?.urlname || '匿名';
           const shortTitle = truncateTitle(a.title, 32);
           list.innerHTML += `
@@ -368,7 +356,7 @@ async function fetchArticles() {
               <div class="notif-content">
                 <div class="notif-text"><span class="notif-name">${userName}</span>さんがあなたの記事にコメントしました</div>
                 <div class="notif-article-title">${shortTitle}</div>
-                <div class="notif-time">${cTimeAgo}</div>
+                <div class="notif-time">${cDate}</div>
               </div>
             </div>`;
         });

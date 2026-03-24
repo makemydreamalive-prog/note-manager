@@ -256,7 +256,7 @@ async function fetchCommentsForNote(noteKey) {
   if (!res || !res.ok) return [];
   try {
     const data = await res.json();
-    return data.data?.comments || [];
+    return data.data?.note_comments || data.data?.comments || data.data || [];
   } catch(e) { return []; }
 }
 
@@ -264,10 +264,10 @@ function filterUnrepliedComments(comments, ownerUrlname) {
   return comments.filter(c => {
     // 自分自身のコメントは除外
     if (c.user?.urlname === ownerUrlname) return false;
-    // サブコメント（返信）に自分の返信があれば除外
-    const subs = c.sub_comments || c.children || [];
-    const ownerReplied = subs.some(s => s.user?.urlname === ownerUrlname);
-    return !ownerReplied;
+    // 返信数が0件のコメントのみ残す
+    const replyCount = c.reply_count ?? c.sub_comment_count ?? c.children_count
+      ?? (c.sub_comments || c.children || []).length ?? 0;
+    return replyCount === 0;
   });
 }
 

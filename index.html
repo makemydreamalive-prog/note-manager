@@ -240,24 +240,38 @@ async function fetchComments() {
   status.textContent = '記事一覧を取得中...';
 
   try {
+    const CUTOFF = new Date('2025-09-08T10:00:00+09:00').getTime();
     let allNotes = [];
     let page = 1;
+    let totalFetched = 0;
     while (true) {
       const res = await fetch(CORS + encodeURIComponent(`${NOTE_API}/v2/creators/${urlname}/contents?kind=note&page=${page}`));
       if (!res.ok) throw new Error('ユーザーが見つからないか、APIエラーが発生しました');
       const data = await res.json();
       const contents = data?.data?.contents || [];
       if (contents.length === 0) break;
-      allNotes = allNotes.concat(contents);
-      status.textContent = `記事一覧を取得中... ${allNotes.length}件`;
+      totalFetched += contents.length;
+      for (const note of contents) {
+        const pubRaw = note.publishAt || note.publish_at || note.published_at || note.createdAt || note.created_at || '';
+        const pubTime = pubRaw ? new Date(pubRaw).getTime() : 0;
+        if (pubTime >= CUTOFF) {
+          allNotes.push(note);
+        }
+      }
+      status.textContent = `記事一覧を取得中... ${totalFetched}件中 ${allNotes.length}件が対象（2025/9/8以降）`;
       if (data?.data?.isLastPage) break;
       page++;
     }
-    if (allNotes.length === 0) throw new Error('記事が見つかりませんでした。アカウント名を確認してね');
+    if (allNotes.length === 0) throw new Error(`${totalFetched}件の記事を確認しましたが、2025年9月8日以降の記事が見つかりませんでした`);
 
     let allComments = [];
-    const targets = allNotes.filter(n => (n.commentCount || n.comment_count || 0) > 0);
-    status.textContent = `${allNotes.length}件の記事のうち、コメント付き${targets.length}件からコメントを取得中...`;
+    const hasCountField = allNotes.some(n => n.commentCount != null || n.comment_count != null || n.commentsCount != null);
+    const targets = hasCountField
+      ? allNotes.filter(n => (n.commentCount || n.comment_count || n.commentsCount || 0) > 0)
+      : allNotes;
+    status.textContent = hasCountField
+      ? `${allNotes.length}件の記事のうち、コメント付き${targets.length}件からコメントを取得中...`
+      : `${allNotes.length}件の記事すべてからコメントを取得中...`;
 
     for (let i = 0; i < targets.length; i++) {
       const note = targets[i];
@@ -267,14 +281,27 @@ async function fetchComments() {
         if (!res.ok) continue;
         const data = await res.json();
         const comments = data?.data?.comments || [];
-        comments.forEach(c => {
-          allComments.push({ ...c, articleTitle: note.name, articleKey: note.key });
-        });
+        for (const c of comments) {
+          const replies = c.replies || c.thread?.comments || [];
+          const replyCount = c.replyCount ?? c.reply_count ?? replies.length;
+          const hasOwnerReply = replies.some(r => {
+            const rUrlname = r.user?.urlname || r.user?.url_name || '';
+            return rUrlname === urlname;
+          });
+          const apiHasReplyData = Array.isArray(c.replies) || c.thread || c.replyCount != null || c.reply_count != null;
+          let isUnreplied;
+          if (apiHasReplyData) {
+            isUnreplied = replyCount === 0 || !hasOwnerReply;
+          } else {
+            isUnreplied = !repliedComments.includes(c.id);
+          }
+          allComments.push({ ...c, articleTitle: note.name, articleKey: note.key, _unreplied: isUnreplied, _apiDetected: apiHasReplyData });
+        }
       } catch(e) {}
       await new Promise(r => setTimeout(r, 150));
     }
 
-    const unreplied = allComments.filter(c => !repliedComments.includes(c.id));
+    const unreplied = allComments.filter(c => c._unreplied);
     document.getElementById('m-articles').textContent = allNotes.length;
     document.getElementById('m-total').textContent = allComments.length;
     document.getElementById('m-unreplied').textContent = unreplied.length;
@@ -289,6 +316,9 @@ async function fetchComments() {
         const name = c.user?.nickname || '不明';
         const comment = c.body || c.comment || '';
         const articleUrl = `https://note.com/${urlname}/n/${c.articleKey}`;
+        const markBtn = c._apiDetected
+          ? ''
+          : `<button class="btn-sm" onclick="markReplied(${c.id})">返信済みにする</button>`;
         list.innerHTML += `
           <div class="comment-card" id="cc-${c.id}">
             <div class="article-title"><a href="${articleUrl}" target="_blank">${c.articleTitle}</a></div>
@@ -301,7 +331,7 @@ async function fetchComments() {
             </div>
             <div class="comment-body">${comment}</div>
             <div class="comment-actions">
-              <button class="btn-sm" onclick="markReplied(${c.id})">返信済みにする</button>
+              ${markBtn}
               <a class="btn-sm" href="${articleUrl}#comments" target="_blank">noteで返信</a>
             </div>
           </div>`;

@@ -171,6 +171,7 @@ function parseRSS(xml) {
   return items;
 }
 let checkedArticles = JSON.parse(localStorage.getItem('nc_checked') || '[]');
+let repliedComments = JSON.parse(localStorage.getItem('nc_replied') || '[]');
 let creators = JSON.parse(localStorage.getItem('nc_creators') || '[]');
 let readFeeds = JSON.parse(localStorage.getItem('nc_read_feeds') || '[]');
 let collapsedGroups = JSON.parse(localStorage.getItem('nc_collapsed_groups') || '[]');
@@ -385,16 +386,17 @@ async function fetchArticles() {
       const date = a.pubDate ? new Date(a.pubDate).toLocaleDateString('ja-JP') : '';
       const isChecked = checkedArticles.includes(id);
       if (comments.length > 0) {
-        articlesWithComments++;
-        totalComments += comments.length;
-        comments.forEach(c => {
+        const unreplied = comments.filter(c => !repliedComments.includes(c.key || ''));
+        articlesWithComments += unreplied.length > 0 ? 1 : 0;
+        totalComments += unreplied.length;
+        unreplied.forEach(c => {
           const cDate = c.created_at ? new Date(c.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
           const avatar = c.user?.profile_image_url || '';
           const userName = c.user?.nickname || c.user?.urlname || '匿名';
           const shortTitle = truncateTitle(a.title, 32);
           const commentKey = c.key || '';
           const commentUrl = a.link ? a.link + '?from=notice&scrollpos=comment&c=' + commentKey : '#';
-          list.innerHTML += '<div class="comment-card ' + (isChecked ? 'read' : '') + '" data-article-id="' + id + '" onclick="window.open(\'' + commentUrl.replace(/'/g, "\\'") + '\',\'_blank\')">'
+          list.innerHTML += '<div class="comment-card ' + (isChecked ? 'read' : '') + '" data-article-id="' + id + '" data-comment-key="' + commentKey + '" onclick="window.open(\'' + commentUrl.replace(/'/g, "\\'") + '\',\'_blank\')">'
             + '<div class="notif-icon"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg></div>'
             + (avatar ? '<img class="notif-avatar" src="' + avatar + '" onerror="this.style.display=\'none\'" />' : '<div class="notif-avatar"></div>')
             + '<div class="notif-content">'
@@ -427,6 +429,11 @@ async function fetchArticles() {
 function markReplied(btn) {
   const card = btn.closest('.comment-card');
   if (card) {
+    const key = card.dataset.commentKey;
+    if (key && !repliedComments.includes(key)) {
+      repliedComments.push(key);
+      localStorage.setItem('nc_replied', JSON.stringify(repliedComments));
+    }
     card.style.display = 'none';
     const counter = document.getElementById('m-articles');
     const current = parseInt(counter.textContent) || 0;

@@ -124,7 +124,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div>
 
 <script>
+const CORS_PROXIES = [
+  url => 'https://corsproxy.io/?' + encodeURIComponent(url),
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+];
 const CORS = 'https://corsproxy.io/?url=';
+async function fetchWithCors(url) {
+  for (const proxy of CORS_PROXIES) {
+    try {
+      const res = await fetch(proxy(url));
+      if (res.ok) return res;
+      console.warn(`[note-mgr] Proxy returned ${res.status} for ${url}`);
+    } catch(e) {
+      console.warn(`[note-mgr] Proxy failed for ${url}:`, e.message);
+    }
+  }
+  // Direct fetch as last resort
+  try { return await fetch(url); } catch(e) { return null; }
+}
 function parseRSS(xml) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'text/xml');
@@ -245,8 +262,8 @@ async function fetchComments() {
     let page = 1;
     let totalFetched = 0;
     while (true) {
-      const res = await fetch(CORS + encodeURIComponent(`${NOTE_API}/v2/creators/${urlname}/contents?kind=note&page=${page}`));
-      if (!res.ok) throw new Error('ユーザーが見つからないか、APIエラーが発生しました');
+      const res = await fetchWithCors(`${NOTE_API}/v2/creators/${urlname}/contents?kind=note&page=${page}`);
+      if (!res || !res.ok) throw new Error('ユーザーが見つからないか、APIエラーが発生しました');
       const data = await res.json();
       const contents = data?.data?.contents || [];
       if (contents.length === 0) break;
@@ -276,30 +293,28 @@ async function fetchComments() {
     let debugErrors = 0;
     let debugEmpty = 0;
     let debugSuccess = 0;
+    let firstResponse = null;
     for (let i = 0; i < targets.length; i++) {
       const note = targets[i];
-      if (i % 5 === 0) status.textContent = `コメント取得中... (${i}/${targets.length})`;
+      if (i % 5 === 0) status.textContent = `コメント取得中... (${i}/${targets.length}) [成功:${debugSuccess} 空:${debugEmpty} エラー:${debugErrors}]`;
       try {
-        // Try multiple API endpoints
         let comments = [];
-        const endpoints = [
-          `${NOTE_API}/v1/note/${note.id}/comments`,
-          `${NOTE_API}/v3/note_comments?note_id=${note.id}`
-        ];
-        for (const ep of endpoints) {
-          try {
-            const res = await fetch(CORS + encodeURIComponent(ep));
-            if (!res.ok) { console.warn(`[note-mgr] ${ep} returned ${res.status}`); continue; }
-            const data = await res.json();
-            console.log(`[note-mgr] Response from ${ep}:`, JSON.stringify(data).substring(0, 500));
-            // Try multiple response structures
-            comments = data?.data?.comments || data?.comments || data?.data || [];
-            if (!Array.isArray(comments)) comments = [];
-            if (comments.length > 0) break;
-          } catch(epErr) {
-            console.warn(`[note-mgr] Error for ${ep}:`, epErr.message);
-          }
+        const commentUrl = `${NOTE_API}/v1/note/${note.id}/comments`;
+        const res = await fetchWithCors(commentUrl);
+        if (!res) { debugErrors++; continue; }
+        if (!res.ok) {
+          debugErrors++;
+          if (i < 3) console.warn(`[note-mgr] ${commentUrl} HTTP ${res.status}`, await res.text().catch(() => ''));
+          continue;
         }
+        const data = await res.json();
+        if (!firstResponse) {
+          firstResponse = JSON.stringify(data).substring(0, 300);
+          console.log('[note-mgr] First comment API response:', firstResponse);
+        }
+        // Try multiple response structures
+        comments = data?.data?.comments || data?.comments || [];
+        if (!Array.isArray(comments)) comments = [];
         if (comments.length === 0) { debugEmpty++; } else { debugSuccess++; }
         for (const c of comments) {
           const replies = c.replies || c.thread?.comments || [];
@@ -317,10 +332,11 @@ async function fetchComments() {
           }
           allComments.push({ ...c, articleTitle: note.name, articleKey: note.key, _unreplied: isUnreplied, _apiDetected: apiHasReplyData });
         }
-      } catch(e) { debugErrors++; console.error('[note-mgr] Outer error:', e); }
+      } catch(e) { debugErrors++; console.error('[note-mgr] Error:', e); }
       await new Promise(r => setTimeout(r, 200));
     }
     console.log(`[note-mgr] Results: ${debugSuccess} with comments, ${debugEmpty} empty, ${debugErrors} errors`);
+    if (firstResponse) console.log('[note-mgr] First response sample:', firstResponse);
 
     const unreplied = allComments.filter(c => c._unreplied);
     document.getElementById('m-articles').textContent = allNotes.length;
@@ -359,7 +375,8 @@ async function fetchComments() {
       });
     }
     status.className = 'status';
-    status.textContent = `完了 — 未返信コメント ${unreplied.length}件`;
+    const debugInfo = debugErrors > 0 ? ` (API応答: 成功${debugSuccess} 空${debugEmpty} エラー${debugErrors})` : '';
+    status.textContent = `完了 — 未返信コメント ${unreplied.length}件${debugInfo}`;
   } catch(e) {
     status.className = 'status error';
     status.textContent = e.message;
@@ -417,7 +434,8 @@ async function fetchFeeds() {
   for (const creator of creators) {
     try {
       const rssUrl = `https://note.com/${creator}/rss`;
-      const res = await fetch(CORS + encodeURIComponent(rssUrl));
+      const res = await fetchWithCors(rssUrl);
+      if (!res) throw new Error('RSSの取得に失敗しました');
       const xml = await res.text();
       const items = parseRSS(xml);
       items.forEach(item => allItems.push({ ...item, creatorName: creator }));

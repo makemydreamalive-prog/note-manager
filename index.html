@@ -261,12 +261,9 @@ async function fetchCommentsForNote(noteKey) {
     const text = await res.text();
     const data = JSON.parse(text);
     console.log(`[note-mgr] Comments for ${noteKey}:`, data);
-    // v3 APIの様々なレスポンス構造に対応
-    const comments = data.data?.note_comments || data.data?.comments || data.note_comments || data.comments || [];
-    if (Array.isArray(comments)) return comments;
+    // v3 API: { data: [...], current_page, total_count }
     if (Array.isArray(data.data)) return data.data;
-    if (Array.isArray(data)) return data;
-    return [];
+    return data.data?.note_comments || data.data?.comments || [];
   } catch(e) {
     console.warn(`[note-mgr] JSON parse error for ${noteKey}:`, e.message);
     return [];

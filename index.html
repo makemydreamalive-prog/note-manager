@@ -143,6 +143,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <script>
 const CORS_PROXIES = [
+  url => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(url),
   url => 'https://corsproxy.io/?' + encodeURIComponent(url),
   url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
 ];
@@ -152,14 +153,34 @@ async function fetchWithCors(url) {
   for (const proxy of CORS_PROXIES) {
     try {
       const res = await fetch(proxy(noCacheUrl), { cache: 'no-store' });
-      if (res.ok) return res;
-      console.warn(`[note-mgr] Proxy returned ${res.status} for ${url}`);
+      if (!res.ok) {
+        console.warn(`[note-mgr] Proxy returned ${res.status} for ${url}`);
+        continue;
+      }
+      const body = await res.text();
+      if (!body || body.length === 0) {
+        console.warn(`[note-mgr] Proxy returned empty body for ${url}`);
+        continue;
+      }
+      return new Response(body, {
+        status: res.status,
+        headers: { 'content-type': res.headers.get('content-type') || 'text/plain' }
+      });
     } catch(e) {
       console.warn(`[note-mgr] Proxy failed for ${url}:`, e.message);
     }
   }
   // Direct fetch as last resort
-  try { return await fetch(noCacheUrl, { cache: 'no-store' }); } catch(e) { return null; }
+  try {
+    const res = await fetch(noCacheUrl, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const body = await res.text();
+    if (!body) return null;
+    return new Response(body, {
+      status: res.status,
+      headers: { 'content-type': res.headers.get('content-type') || 'text/plain' }
+    });
+  } catch(e) { return null; }
 }
 function parseRSS(xml) {
   const parser = new DOMParser();
@@ -545,12 +566,21 @@ async function fetchFeeds() {
   const creatorProfiles = {};
   for (const creator of creators) {
     try {
-      const rssUrl = `https://note.com/${creator}/rss`;
-      const res = await fetchWithCors(rssUrl);
-      if (!res) throw new Error('RSSの取得に失敗しました');
-      const xml = await res.text();
-      const items = parseRSS(xml);
-      items.forEach(item => allItems.push({ ...item, creatorName: creator }));
+      const apiUrl = `https://note.com/api/v2/creators/${creator}/contents?kind=note&page=1&per=20`;
+      const res = await fetchWithCors(apiUrl);
+      if (!res || !res.ok) throw new Error('記事の取得に失敗しました');
+      const data = await res.json();
+      const notes = data.data?.contents || [];
+      notes.forEach(n => {
+        allItems.push({
+          title: n.name || n.title || '',
+          link: `https://note.com/${creator}/n/${n.key}`,
+          pubDate: n.published_at || n.created_at || '',
+          thumbnail: n.eyecatch || '',
+          description: n.body || '',
+          creatorName: creator
+        });
+      });
     } catch(e) {}
     try {
       const profileRes = await fetchWithCors(`https://note.com/api/v2/creators/${creator}`);

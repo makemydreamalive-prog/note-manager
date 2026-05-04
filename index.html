@@ -360,12 +360,12 @@ async function fetchAllArticlesViaAPI(urlname, statusEl) {
     if (notes.length === 0) break;
     let reachedCutoff = false;
     for (const n of notes) {
-      const pubTime = new Date(n.published_at || n.created_at).getTime();
+      const pubTime = new Date(n.publishAt || n.published_at || n.createdAt || n.created_at).getTime();
       if (pubTime < cutoff) { reachedCutoff = true; break; }
       articles.push({
         title: n.name || n.title || '',
         link: `https://note.com/${urlname}/n/${n.key}`,
-        pubDate: n.published_at || n.created_at || '',
+        pubDate: n.publishAt || n.published_at || n.createdAt || n.created_at || '',
         thumbnail: n.eyecatch || '',
         description: n.body || ''
       });
@@ -428,7 +428,7 @@ async function fetchArticles() {
       articles = allNotes.slice(0, articleCount).map(n => ({
         title: n.name || n.title || '',
         link: `https://note.com/${urlname}/n/${n.key}`,
-        pubDate: n.published_at || n.created_at || '',
+        pubDate: n.publishAt || n.published_at || n.createdAt || n.created_at || '',
         thumbnail: n.eyecatch || '',
         description: n.body || ''
       }));
@@ -575,7 +575,7 @@ async function fetchFeeds() {
         allItems.push({
           title: n.name || n.title || '',
           link: `https://note.com/${creator}/n/${n.key}`,
-          pubDate: n.published_at || n.created_at || '',
+          pubDate: n.publishAt || n.published_at || n.createdAt || n.created_at || '',
           thumbnail: n.eyecatch || '',
           description: n.body || '',
           creatorName: creator
